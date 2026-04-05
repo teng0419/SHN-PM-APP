@@ -2,89 +2,82 @@ import streamlit as st
 import pandas as pd
 import os
 
-# --- 1. 資料庫初始化 (打地基) ---
-# 這裡我們用一個本地的 CSV 檔來模擬資料庫，儲存所有任務的進度。
-DB_FILE = 'project_tasks.csv'
+# --- 1. 資料庫初始化 (建立假設的測試資料) ---
+DB_FILE = 'master_tasks_mock.csv'
 
 def load_or_init_data():
     if not os.path.exists(DB_FILE):
-        # 依照你的試算表定義樓層與系統
-        floors = ['B2F', 'B1F', '1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F', '9F', '10F', 'R1']
-        # 為了示範，先列出主要的幾項弱電系統
-        systems = ['資訊網路設備', 'FTTH光纖到府', '監視系統', '門禁系統', 'IP電話交換機', '中央監控']
-        stages = ['穿線', '設備安裝', '系統測試']
-        
-        # 展開成扁平化的任務清單
-        data = []
-        for f in floors:
-            for sys in systems:
-                for s in stages:
-                    data.append({'樓層': f, '系統': sys, '施工階段': s, '是否完成': False})
-        
+        # 這裡就是我們假設的資料結構，包含你提到的「地點」與「總數量/已完成」
+        data = [
+            {'系統': '監視系統', '樓層': '1F', '地點': '大廳入口', '工項': '網路紅外線半球型攝影機', '總數量': 2, '已完成數量': 0, '單位': '台'},
+            {'系統': '監視系統', '樓層': '1F', '地點': '車道口', '工項': '車牌辨識攝影機', '總數量': 1, '已完成數量': 0, '單位': '台'},
+            {'系統': '監視系統', '樓層': '2F', '地點': 'A201戶門口', '工項': '網路紅外線半球型攝影機', '總數量': 1, '已完成數量': 0, '單位': '台'},
+            {'系統': '門禁系統', '樓層': '1F', '地點': '大廳大門', '工項': '讀卡機與電子鎖', '總數量': 1, '已完成數量': 0, '單位': '組'},
+            {'系統': '門禁系統', '樓層': 'B1F', '地點': 'A棟梯廳', '工項': '讀卡機', '總數量': 2, '已完成數量': 0, '單位': '組'},
+            {'系統': 'FTTH光纖到府', '樓層': '1F', '地點': '電信機房', '工項': '光纖引進線', '總數量': 150, '已完成數量': 0, '單位': '米'},
+        ]
         df = pd.DataFrame(data)
         df.to_csv(DB_FILE, index=False)
         return df
     else:
         return pd.read_csv(DB_FILE)
 
-# 載入資料
 df = load_or_init_data()
 
-# --- 2. 介面設計 (控制面板) ---
-st.set_page_config(page_title="友忠好室 - 弱電工程管理", layout="wide")
-st.title("🏗️ 友忠好室 - 弱電工程進度管理")
+# --- 2. 介面設計 (漏斗式控制面板) ---
+st.set_page_config(page_title="工程進度回報測試", layout="centered")
+st.title("🏗️ 現場進度回報 (動線測試版)")
 
-# 建立兩個分頁：一個給主管看大局，一個給現場人員回報
-tab1, tab2 = st.tabs(["📊 進度總覽 (Dashboard)", "📱 現場進度回報"])
+st.subheader("1. 選擇施工位置")
+# 使用三個並排的選單，並產生連動過濾效果
+col1, col2, col3 = st.columns(3)
 
-with tab1:
-    st.subheader("整體工程進度")
-    # 計算完成率
-    total_tasks = len(df)
-    completed_tasks = df['是否完成'].sum()
-    progress_rate = completed_tasks / total_tasks
-    
-    # 顯示大數字看板與進度條
-    col1, col2 = st.columns(2)
-    col1.metric("總任務數", total_tasks)
-    col2.metric("已完成", f"{completed_tasks} 項", f"{progress_rate*100:.1f}%")
-    st.progress(progress_rate)
-    
-    # 顯示原始資料表供查閱
-    st.dataframe(df, use_container_width=True)
+with col1:
+    selected_system = st.selectbox("施工系統", df['系統'].unique())
 
-with tab2:
-    st.subheader("現場施工回報")
+# 根據選到的系統，過濾出該系統有安排的樓層
+filtered_df_sys = df[df['系統'] == selected_system]
+with col2:
+    selected_floor = st.selectbox("施工樓層", filtered_df_sys['樓層'].unique())
+
+# 根據系統與樓層，過濾出該區域有的地點
+filtered_df_floor = filtered_df_sys[filtered_df_sys['樓層'] == selected_floor]
+with col3:
+    selected_location = st.selectbox("施工地點", filtered_df_floor['地點'].unique())
+
+st.markdown("---")
+st.subheader("2. 回報施工數量")
+
+# 最終篩選出該地點需要做的所有工項
+final_tasks = filtered_df_floor[filtered_df_floor['地點'] == selected_location]
+
+with st.form("progress_form"):
+    updated_values = {}
     
-    # 建立過濾選單
-    col_f, col_s = st.columns(2)
-    selected_floor = col_f.selectbox("選擇施工樓層", df['樓層'].unique())
-    selected_system = col_s.selectbox("選擇施工系統", df['系統'].unique())
-    
-    st.markdown("---")
-    st.write(f"**目前回報位置：{selected_floor} - {selected_system}**")
-    
-    # 篩選出符合條件的任務
-    mask = (df['樓層'] == selected_floor) & (df['系統'] == selected_system)
-    tasks_to_show = df[mask]
-    
-    # 使用表單讓人員勾選進度
-    with st.form("update_form"):
-        updated_status = {}
-        for index, row in tasks_to_show.iterrows():
-            # 建立核取方塊，預設值為資料庫目前的狀態
-            is_done = st.checkbox(f"{row['施工階段']}", value=bool(row['是否完成']), key=index)
-            updated_status[index] = is_done
-            
-        # 照片上傳區塊 (目前僅做介面，尚未寫入存檔邏輯)
-        st.file_uploader("上傳現場施工照片 (選填)", type=['jpg', 'png'])
+    # 將該地點的工項一條一條列出來讓使用者填寫
+    for index, row in final_tasks.iterrows():
+        # 顯示工項名稱與總數量
+        st.markdown(f"**{row['工項']}** (應完工總數: {row['總數量']} {row['單位']})")
         
-        submitted = st.form_submit_button("儲存進度")
-        
-        if submitted:
-            # 更新 DataFrame 並存回 CSV
-            for idx, status in updated_status.items():
-                df.at[idx, '是否完成'] = status
-            df.to_csv(DB_FILE, index=False)
-            st.success("進度已成功更新！")
-            st.rerun() # 重新載入頁面以更新儀表板數字
+        # 建立數字輸入框，預設顯示上次儲存的已完成數量
+        new_val = st.number_input(
+            "目前已完成",
+            min_value=0,
+            max_value=int(row['總數量']),
+            value=int(row['已完成數量']),
+            step=1,
+            key=f"input_{index}"
+        )
+        updated_values[index] = new_val
+        st.write("") # 排版留白
+
+    # 提交按鈕
+    submitted = st.form_submit_button("儲存進度", type="primary")
+    
+    if submitted:
+        # 將填寫的數字寫回 DataFrame 並存檔
+        for idx, val in updated_values.items():
+            df.at[idx, '已完成數量'] = val
+        df.to_csv(DB_FILE, index=False)
+        st.success("數量已成功更新！")
+        st.rerun()
