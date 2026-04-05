@@ -183,7 +183,9 @@ def load_or_init_data():
         df.to_csv(DB_FILE, index=False)
         return df
     else:
-        df = pd.read_csv(DB_FILE)
+        df = pd.read_csv(DB_FILE, dtype={'最後更新者': str, '更新時間': str})
+        df['最後更新者'] = df['最後更新者'].fillna('')
+        df['更新時間'] = df['更新時間'].fillna('')
         return df
 
 df = load_or_init_data()
